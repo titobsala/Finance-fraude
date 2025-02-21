@@ -1,0 +1,28 @@
+flowchart LR
+    subgraph Geração de Dados
+        G[Data Generator] --> |Multiprocessing| T1[Transaction Logs]
+        T1 --> |Python| KP[Kafka Producer]
+    end
+
+    subgraph Message Broker
+        KP --> |JSON| K1[Kafka Topic:\nRaw Transactions]
+        K1 --> |Streaming| K2[Kafka Topic:\nProcessed Data]
+    end
+
+    subgraph Processing
+        K1 --> SP[Spark Streaming]
+        SP --> |ML Pipeline| FR[Fraud Detection]
+        FR --> |Classification| K2
+    end
+
+    subgraph Storage & Analytics
+        K2 --> DB[(Data Lake)]
+        DB --> |Batch Processing| ML[ML Training]
+        ML --> |Model Update| FR
+    end
+
+    subgraph Visualization
+        K2 --> |Real-time| D1[Dashboard:\nMetrics]
+        DB --> |Historical| D2[Dashboard:\nAnalytics]
+        FR --> |Alerts| D3[Dashboard:\nAlerts]
+    end
