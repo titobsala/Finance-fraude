@@ -1,0 +1,5 @@
+influxdb:
+  url: http://influxdb:8086
+  token: my-super-secret-token
+  org: fraud-detection
+  bucket: metrics

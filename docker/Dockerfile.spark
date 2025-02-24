@@ -1,0 +1,18 @@
+FROM bitnami/spark:3.3.1
+
+USER root
+
+# Instalar dependências Python
+RUN apt-get update && apt-get install -y python3-pip python3-dev
+
+# Copiar requirements e instalar
+COPY requirements.txt .
+RUN pip3 install --no-cache-dir -r requirements.txt
+
+# Adicionar configurações Spark
+COPY config/spark.yml /opt/bitnami/spark/conf/
+
+# Permitir acesso ao PySpark para usuário não-root
+RUN chmod -R 777 /opt/bitnami/spark/
+
+USER 1001
