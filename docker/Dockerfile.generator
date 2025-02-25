@@ -5,11 +5,10 @@ WORKDIR /app
 # Instalar dependências
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY . .
 
-# Copiar o código fonte
-COPY src/ /app/src/
-COPY config/ /app/config/
+# Não copiar o código fonte aqui, pois será montado via volume
+# Vamos apenas garantir que as pastas existam
+RUN mkdir -p /app/src /app/config
 
 # Configurar variável de ambiente
 ENV PYTHONPATH=/app

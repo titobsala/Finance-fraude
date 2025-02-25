@@ -1,5 +1,10 @@
+# Configurações InfluxDB
+
 influxdb:
   url: http://influxdb:8086
   token: my-super-secret-token
   org: fraud-detection
   bucket: metrics
+  retention: 30d
+  username: admin
+  password: adminpassword

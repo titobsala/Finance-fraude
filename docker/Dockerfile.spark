@@ -9,8 +9,12 @@ RUN apt-get update && apt-get install -y python3-pip python3-dev
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Adicionar configurações Spark
-COPY config/spark.yml /opt/bitnami/spark/conf/
+# Preparar diretório para montagem de volume
+RUN mkdir -p /app/config
+RUN mkdir -p /app/src
+
+# Configurar variável de ambiente
+ENV PYTHONPATH=/app
 
 # Permitir acesso ao PySpark para usuário não-root
 RUN chmod -R 777 /opt/bitnami/spark/

@@ -69,7 +69,7 @@ build_images() {
 start_containers() {
   log "Iniciando containers..."
   
-
+   docker || { error "Diretório docker não encontrado!"; exit 1; }
   docker-compose up -d
   
   if [ $? -ne 0 ]; then
@@ -78,13 +78,21 @@ start_containers() {
   fi
   
   log "Containers iniciados com sucesso."
+  cd ..
 }
 
 # Verificar status dos containers
 check_status() {
   log "Verificando status dos containers..."
   
-  docker-compose ps
+  if [ -d "docker" ]; then
+    cd docker
+    docker-compose ps
+    cd ..
+  else
+    # Se já estivermos no diretório docker
+    docker-compose ps
+  fi
   
   log "Verificação de status concluída."
 }

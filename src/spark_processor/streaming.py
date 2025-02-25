@@ -5,6 +5,7 @@ import datetime
 from pyspark.sql import SparkSession, DataFrame
 from pyspark.sql.functions import *
 from pyspark.sql.types import *
+from pyspark import SparkConf
 from loguru import logger
 from influxdb_client import InfluxDBClient, Point
 from influxdb_client.client.write_api import SYNCHRONOUS
@@ -15,9 +16,9 @@ from src.fraud_detector.detector import FraudDetector
 class TransactionProcessor:
     """Processador de transações usando Spark Streaming."""
     
-    def __init__(self, spark_config_path: str = "config/spark.yml", 
-                kafka_config_path: str = "config/kafka.yml",
-                influxdb_config_path: str = "config/influxdb.yml"):
+    def __init__(self, spark_config_path: str = "/app/config/spark.yml", 
+                kafka_config_path: str = "/app/config/kafka.yml",
+                influxdb_config_path: str = "/app/config/influxdb.yml"):
         """
         Inicializa o processador de transações.
         
@@ -72,14 +73,36 @@ class TransactionProcessor:
         app_config = self.spark_config['app']
         executor_config = self.spark_config['executor']
         
-        return (SparkSession.builder
-                .appName(app_config['name'])
-                .master(app_config['master'])
-                .config("spark.executor.memory", executor_config['memory'])
-                .config("spark.executor.cores", executor_config['cores'])
-                .config("spark.executor.instances", executor_config['instances'])
-                .config("spark.sql.streaming.checkpointLocation", self.spark_config['checkpoint']['dir'])
-                .getOrCreate())
+        logger.info(f"Iniciando sessão Spark com master: {app_config['master']}")
+        
+        # Cria uma configuração explícita
+        conf = SparkConf()
+        conf.setAppName(app_config['name'])
+        conf.setMaster(app_config['master'])
+        conf.set("spark.executor.memory", executor_config['memory'])
+        conf.set("spark.executor.cores", str(executor_config['cores']))
+        conf.set("spark.executor.instances", str(executor_config['instances']))
+        conf.set("spark.sql.streaming.checkpointLocation", self.spark_config['checkpoint']['dir'])
+        conf.set("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1")
+        
+        # Adiciona configurações para prevenir conflitos
+        conf.set("spark.driver.userClassPathFirst", "true")
+        conf.set("spark.executor.userClassPathFirst", "true")
+        
+        try:
+            return SparkSession.builder.config(conf=conf).getOrCreate()
+        except Exception as e:
+            logger.error(f"Erro ao conectar ao Spark master: {e}")
+            logger.warning("Tentando iniciar Spark em modo local")
+            
+            # Configura localmente
+            local_conf = SparkConf()
+            local_conf.setAppName(app_config['name'])
+            local_conf.setMaster("local[*]")
+            local_conf.set("spark.sql.streaming.checkpointLocation", self.spark_config['checkpoint']['dir'])
+            local_conf.set("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1")
+            
+            return SparkSession.builder.config(conf=local_conf).getOrCreate()
     
     def _define_schema(self) -> StructType:
         """Define o schema para as transações."""
