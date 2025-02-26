@@ -43,7 +43,7 @@ services:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - "3000:3000"
+      - "3001:3001"
     environment:
       GF_INSTALL_PLUGINS: grafana-clock-panel,grafana-simple-json-datasource
     volumes:
@@ -78,6 +78,19 @@ services:
       - SPARK_SSL_ENABLED=no
     ports:
       - "8081:8081"
+
+timescaledb:
+  image: timescale/timescaledb:latest-pg13
+  container_name: timescaledb
+  ports:
+    - "5432:5432"
+  environment:
+    POSTGRES_USER: postgres
+    POSTGRES_PASSWORD: postgres
+    POSTGRES_DB: payment_system
+  volumes:
+    - timescale_data:/var/lib/postgresql/data
+    - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
 
 volumes:
   timescale_data:
