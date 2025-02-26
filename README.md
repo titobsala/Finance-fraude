@@ -1,98 +1,97 @@
-# Sistema de Detecção de Fraudes em Tempo Real
+# Payment Processing System with Fraud Detection
+
+Este projeto implementa um sistema de processamento de pagamentos em tempo real com detecção de fraudes, utilizando tecnologias modernas como Kafka, Spark e Grafana.
 
 ## Visão Geral
-Sistema de detecção de fraudes em tempo real utilizando Apache Kafka e Spark para processamento de transações financeiras. O projeto implementa uma arquitetura completa de streaming de dados, desde a geração de dados simulados até a visualização em tempo real no Grafana.
+
+O sistema simula uma plataforma de processamento de pagamentos com os seguintes componentes:
+
+- **Gerador de logs** - Simula transações de pagamento de várias fontes
+- **Kafka** - Atua como hub central de mensagens
+- **Spark Streaming** - Processa dados em tempo real
+- **Modelo de detecção de fraudes** - Identifica transações suspeitas
+- **Grafana** - Dashboard para visualização em tempo real
 
 ## Arquitetura
 
-O sistema é composto por cinco componentes principais:
-1. Gerador de Dados - Simula transações financeiras com padrões normais e fraudulentos
-2. Message Broker (Kafka) - Gerencia o fluxo de mensagens entre componentes
-3. Processamento em Tempo Real (Spark) - Analisa transações em tempo real
-4. Sistema de Detecção de Fraudes - Identifica transações suspeitas
-5. Dashboard de Visualização (Grafana) - Monitora métricas e alertas
+O fluxo de dados segue estas etapas:
+1. Geração de dados simulados de diferentes fontes de pagamento
+2. Ingestão de dados via Kafka
+3. Processamento em tempo real com Spark Streaming
+4. Detecção de fraudes com modelos de ML
+5. Visualização e alertas via Grafana
 
-## Tecnologias Utilizadas
-- Python 3.9+
+## Requisitos
+
+- Docker e Docker Compose
+- Python 3.8+
 - Apache Kafka
 - Apache Spark
-- Docker & Docker Compose
-- MLlib (Spark ML)
-- Grafana & InfluxDB
-- Git (Controle de Versão)
+- Grafana
+- TimescaleDB (para séries temporais)
 
 ## Estrutura do Projeto
+
 ```
-fraud-detection/
-├── docker/
-│   ├── Dockerfile.generator
-│   ├── Dockerfile.processor
-│   ├── Dockerfile.spark
-│   └── docker-compose.yml
-├── src/
-│   ├── data_generator/
-│   │   ├── __init__.py
-│   │   ├── generator.py
-│   │   └── transaction.py
-│   ├── kafka_utils/
-│   │   ├── __init__.py
-│   │   ├── producer.py
-│   │   └── consumer.py
-│   ├── spark_processor/
-│   │   ├── __init__.py
-│   │   └── streaming.py
-│   ├── fraud_detector/
-│   │   ├── __init__.py
-│   │   ├── model.py
-│   │   └── detector.py
-│   └── dashboard/
-│       ├── __init__.py
-│       └── metrics.py
-├── config/
-│   ├── generator.yml
-│   ├── kafka.yml
-│   ├── spark.yml
-│   └── grafana/
-│       ├── dashboards/
-│       └── datasources/
-├── tests/
+payment-system/
+├── docker-compose.yml
+├── generator/
+│   ├── transaction_generator.py
+│   └── config.py
+├── kafka/
+│   ├── producer.py
+│   └── consumer.py
+├── spark/
+│   ├── streaming.py
+│   └── batch_processing.py
 ├── models/
-└── docs/
+│   └── fraud_detection.py
+├── dashboard/
+│   └── grafana/
+│       ├── dashboard.json
+│       └── datasource.yml
+└── tests/
+    ├── test_generator.py
+    └── test_processing.py
 ```
 
-## Roadmap de Desenvolvimento
+## Plano de Implementação
 
-### Fase 1: Setup Inicial e Geração de Dados
-- [x] Configuração do ambiente Docker
-- [x] Implementação do gerador de dados
-- [x] Configuração inicial do Kafka
+### Fase 1: Configuração da Infraestrutura
+- [x] Criar estrutura do projeto
+- [ ] Configurar Docker Compose com Kafka, ZooKeeper, Spark e Grafana
+- [ ] Configurar TimescaleDB para armazenamento de séries temporais
 
-### Fase 2: Processamento de Dados
-- [x] Implementação do consumer Kafka
-- [x] Configuração do Spark Streaming
-- [x] Desenvolvimento do pipeline de processamento
+### Fase 2: Geração de Dados
+- [ ] Desenvolver gerador de transações com diferentes tipos de pagamento
+- [ ] Implementar simulação de comportamentos normais e fraudulentos
+- [ ] Criar produtor Kafka para enviar dados simulados
 
-### Fase 3: Detecção de Fraudes
-- [x] Implementação do modelo ML
-- [x] Integração com Spark Streaming
-- [x] Sistema de alertas
+### Fase 3: Processamento em Tempo Real
+- [ ] Desenvolver aplicação Spark Streaming para consumir tópicos Kafka
+- [ ] Implementar transformações e agregações de dados
+- [ ] Criar modelo básico de detecção de fraudes
 
-### Fase 4: Visualização
-- [ ] Desenvolvimento do dashboard
-- [ ] Implementação de métricas em tempo real
-- [ ] Visualização de alertas
+### Fase 4: Dashboard e Visualização
+- [ ] Configurar Grafana
+- [ ] Desenvolver painéis para métricas-chave
+- [ ] Implementar alertas para transações suspeitas
 
-### Fase 5: Testes e Documentação
-- [ ] Testes unitários
-- [ ] Testes de integração
-- [ ] Documentação completa
+### Fase 5: Melhorias e Otimizações
+- [ ] Refinar modelo de detecção de fraudes
+- [ ] Otimizar performance do processamento
+- [ ] Adicionar testes e documentação
 
-## Como Contribuir
-1. Fork o projeto
-2. Crie uma branch para sua feature (`git checkout -b feature/AmazingFeature`)
-3. Commit suas mudanças (`git commit -m 'Add some AmazingFeature'`)
-4. Push para a branch (`git push origin feature/AmazingFeature`)
-5. Abra um Pull Request
+## Como Executar
 
-## Licença
-Este projeto está sob a licença MIT.
+1. Clone o repositório
+2. Execute `docker-compose up -d` para iniciar todos os serviços
+3. Acesse o Grafana em `http://localhost:3000`
+4. Use as credenciais padrão: admin/admin
+
+## Próximos Passos
+
+Após a implementação inicial, podemos expandir o projeto com:
+- Processamento em lote para treinamento de modelos mais avançados
+- Implementação de APIs REST para integração com outros sistemas
+- Escalabilidade horizontal dos componentes
