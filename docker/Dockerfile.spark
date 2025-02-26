@@ -1,22 +1,18 @@
-FROM bitnami/spark:3.3.1
+FROM bitnami/spark:3.5.1
 
 USER root
 
-# Instalar dependências Python
-RUN apt-get update && apt-get install -y python3-pip python3-dev
+RUN apt-get update && apt-get install -y \
+    python3-pip \
+    openjdk-17-jdk \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Copiar requirements e instalar
+ENV JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+ENV PYTHONPATH=/app
+ENV CLASSPATH=/app
 COPY requirements.txt .
 RUN pip3 install --no-cache-dir -r requirements.txt
 
-# Preparar diretório para montagem de volume
-RUN mkdir -p /app/config
-RUN mkdir -p /app/src
-
-# Configurar variável de ambiente
-ENV PYTHONPATH=/app
-
-# Permitir acesso ao PySpark para usuário não-root
-RUN chmod -R 777 /opt/bitnami/spark/
-
-USER 1001
+COPY src /app/src
+WORKDIR /app 

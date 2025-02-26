@@ -12,6 +12,7 @@ RUN mkdir -p /app/src /app/config
 
 # Configurar variável de ambiente
 ENV PYTHONPATH=/app
+ENV CLASSPATH=/app
 
 # Executar o gerador
 CMD ["python", "-m", "src.data_generator.generator"]

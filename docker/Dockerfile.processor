@@ -20,6 +20,7 @@ RUN pip3 install --no-cache-dir -r requirements.txt
 RUN mkdir -p /app/src /app/config
 
 # Configurar variáveis de ambiente
+ENV CLASSPATH=/app
 ENV PYTHONPATH=/app
 ENV JAVA_HOME=/usr/local/openjdk-11
 ENV PATH=$PATH:$JAVA_HOME/bin

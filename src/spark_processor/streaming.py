@@ -16,7 +16,7 @@ from src.fraud_detector.detector import FraudDetector
 class TransactionProcessor:
     """Processador de transações usando Spark Streaming."""
     
-    def __init__(self, spark_config_path: str = "/app/config/spark.yml", 
+    def __init__(self, spark_config_path: str = "config/spark.yml", 
                 kafka_config_path: str = "/app/config/kafka.yml",
                 influxdb_config_path: str = "/app/config/influxdb.yml"):
         """
@@ -69,41 +69,49 @@ class TransactionProcessor:
         logger.info("Processador de transações inicializado")
     
     def _create_spark_session(self) -> SparkSession:
-        """Cria e configura uma sessão Spark."""
+        """Creates and configures a Spark session with fallback to local mode."""
         app_config = self.spark_config['app']
         executor_config = self.spark_config['executor']
-        
+
         logger.info(f"Iniciando sessão Spark com master: {app_config['master']}")
-        
-        # Cria uma configuração explícita
-        conf = SparkConf()
-        conf.setAppName(app_config['name'])
-        conf.setMaster(app_config['master'])
-        conf.set("spark.executor.memory", executor_config['memory'])
-        conf.set("spark.executor.cores", str(executor_config['cores']))
-        conf.set("spark.executor.instances", str(executor_config['instances']))
-        conf.set("spark.sql.streaming.checkpointLocation", self.spark_config['checkpoint']['dir'])
-        conf.set("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1")
-        
-        # Adiciona configurações para prevenir conflitos
-        conf.set("spark.driver.userClassPathFirst", "true")
-        conf.set("spark.executor.userClassPathFirst", "true")
-        
+
+        # For deployment, create a shared checkpoint dir with proper permissions
+        checkpoint_dir = self.spark_config['checkpoint']['dir']
+
         try:
-            return SparkSession.builder.config(conf=conf).getOrCreate()
+            # Try connecting to the Spark master
+            spark = (SparkSession.builder
+                    .appName(app_config['name'])
+                    .master(app_config['master'])
+                    .config("spark.executor.memory", executor_config['memory'])
+                    .config("spark.executor.cores", str(executor_config['cores']))
+                    .config("spark.executor.instances", str(executor_config['instances']))
+                    .config("spark.sql.streaming.checkpointLocation", checkpoint_dir)
+                    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1")
+                    .config("spark.driver.userClassPathFirst", "true")
+                    .config("spark.executor.userClassPathFirst", "true")
+                    # Increase timeout for master discovery 
+                    .config("spark.network.timeout", "120s")
+                    .getOrCreate())
+
+            logger.info("Conexão com Spark master estabelecida")
+            return spark
+
         except Exception as e:
             logger.error(f"Erro ao conectar ao Spark master: {e}")
             logger.warning("Tentando iniciar Spark em modo local")
-            
-            # Configura localmente
-            local_conf = SparkConf()
-            local_conf.setAppName(app_config['name'])
-            local_conf.setMaster("local[*]")
-            local_conf.set("spark.sql.streaming.checkpointLocation", self.spark_config['checkpoint']['dir'])
-            local_conf.set("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1")
-            
-            return SparkSession.builder.config(conf=local_conf).getOrCreate()
-    
+
+            # Fallback to local mode
+            spark = (SparkSession.builder
+                    .appName(app_config['name'])
+                    .master("local[*]")
+                    .config("spark.sql.streaming.checkpointLocation", checkpoint_dir)
+                    .config("spark.jars.packages", "org.apache.spark:spark-sql-kafka-0-10_2.12:3.3.1")
+                    .getOrCreate())
+
+            logger.info("Sessão Spark local criada com sucesso")
+            return spark
+
     def _define_schema(self) -> StructType:
         """Define o schema para as transações."""
         return StructType([
@@ -134,6 +142,8 @@ class TransactionProcessor:
         bootstrap_servers = self.kafka_config['bootstrap_servers']
         transactions_topic = self.kafka_config['topics']['raw_transactions']
         
+        logger.info(f"Conectando ao Kafka: {bootstrap_servers}, Tópico: {transactions_topic}")
+        
         return (self.spark
                 .readStream
                 .format("kafka")
@@ -144,27 +154,58 @@ class TransactionProcessor:
                 .selectExpr("CAST(value AS STRING)")
                 .select(from_json("value", self._define_schema()).alias("data"))
                 .select("data.*"))
-    
-    def _process_transactions(self, transactions_df):
-        """Processa as transações e detecta fraudes."""
-        # Aplicar detector de fraudes usando UDF
-        fraud_detector_udf = udf(
-            lambda amount, tx_type, merchant_cat, hour, day, country, device_type:
-            self.fraud_detector.predict_fraud_probability(
-                amount, tx_type, merchant_cat, hour, day, country, device_type
-            ),
-            DoubleType()
-        )
         
+    def _process_transactions(self, transactions_df):
+        """Processes the transactions and detects frauds using a serializable approach."""
+
+        # Extract rules from fraud detector to make them serializable
+        amount_thresholds = self.fraud_detector.rules["amount_thresholds"]
+        high_risk_categories = self.fraud_detector.rules["high_risk_categories"]
+        high_risk_countries = self.fraud_detector.rules["high_risk_countries"]
+
+        # Create a serializable rule-based scoring function
+        def calculate_fraud_score(amount, tx_type, merchant_cat, hour, day, country, device_type):
+            score = 0.0
+
+            # Check transaction amount
+            if tx_type in amount_thresholds:
+                threshold = amount_thresholds[tx_type]
+                if amount > threshold:
+                    ratio = amount / threshold
+                    score += min(0.5, ratio / 10)
+
+            # Check merchant category
+            if merchant_cat in high_risk_categories:
+                score += 0.2
+
+            # Check country
+            if country in high_risk_countries:
+                score += 0.3
+
+            # Check time (early morning = higher risk)
+            if 0 <= hour <= 5:
+                score += 0.2
+
+            return min(0.95, score)
+
+        # Register UDF with proper serialization
+        fraud_score_udf = udf(calculate_fraud_score, DoubleType())
+
+        # Apply UDF to process transactions
         processed_df = transactions_df.withColumn(
             "ml_fraud_probability",
-            fraud_detector_udf(
-                "amount", "transaction_type", "merchant_category", 
-                "hour_of_day", "day_of_week", "country", "device_type"
+            fraud_score_udf(
+                col("amount"), 
+                col("transaction_type"), 
+                col("merchant_category"),
+                col("hour_of_day"), 
+                col("day_of_week"), 
+                col("country"), 
+                col("device_type")
             )
         )
-        
-        # Definir status com base na probabilidade de fraude
+
+        # Define final fraud probability and status
         return processed_df.withColumn(
             "final_fraud_probability",
             when(col("is_fraud"), col("fraud_probability"))
@@ -217,39 +258,30 @@ class TransactionProcessor:
             fraud_volume = fraud_volume[0]["fraud_amount"] if fraud_volume[0]["fraud_amount"] else 0
             
             # Escrever pontos no InfluxDB
-            
-            # Transações por segundo
             point = Point("transactions_per_second").tag("batch_id", str(batch_id)).field("count", total_transactions).time(current_time)
             self.write_api.write(bucket=self.influxdb_config['bucket'], record=point)
             
-            # Total de transações
             point = Point("total_transactions").tag("batch_id", str(batch_id)).field("count", total_transactions).time(current_time)
             self.write_api.write(bucket=self.influxdb_config['bucket'], record=point)
             
-            # Transações por status
             for row in status_counts:
                 point = Point("transactions_by_status").tag("status", row["final_status"]).field("count", row["count"]).time(current_time)
                 self.write_api.write(bucket=self.influxdb_config['bucket'], record=point)
             
-            # Transações por tipo
             for row in type_counts:
                 point = Point("transactions_by_type").tag("type", row["transaction_type"]).field("count", row["count"]).time(current_time)
                 self.write_api.write(bucket=self.influxdb_config['bucket'], record=point)
             
-            # Fraudes detectadas
             point = Point("fraud_detected").field("count", fraud_count).time(current_time)
             self.write_api.write(bucket=self.influxdb_config['bucket'], record=point)
             
-            # Taxa de fraude
             fraud_rate = (fraud_count / total_transactions * 100) if total_transactions > 0 else 0
             point = Point("fraud_rate").field("percentage", fraud_rate).time(current_time)
             self.write_api.write(bucket=self.influxdb_config['bucket'], record=point)
             
-            # Volume total
             point = Point("volume_total").tag("currency", "BRL").field("amount", total_volume).time(current_time)
             self.write_api.write(bucket=self.influxdb_config['bucket'], record=point)
             
-            # Volume de fraudes
             point = Point("volume_fraud").tag("currency", "BRL").field("amount", fraud_volume).time(current_time)
             self.write_api.write(bucket=self.influxdb_config['bucket'], record=point)
             
@@ -311,6 +343,7 @@ class TransactionProcessor:
         # Também escrever para console (para debugging)
         if os.environ.get("DEBUG", "false").lower() == "true":
             console_stream = self._write_to_console(processed_df)
+            logger.info("Streaming de console iniciado")
         
         logger.info("Streaming iniciado, aguardando término...")
         
